@@ -1,0 +1,608 @@
+<html>
+
+<head>
+<meta http-equiv="Content-Language" content="en-us">
+<meta http-equiv="Content-Type" content="text/html; charset=windows-1252">
+<title>Introduction</title>
+</head>
+
+<body>
+
+<h2>Introduction</h2>
+<p>We have these brain teaser puzzles at work:</p>
+<p>We've probably all played them -- the idea being you start with one empty 
+hole, the rest are filled with pegs, and each move consists of hopping a peg to 
+an empty location, thus removing the peg you just hopped.&nbsp; The goal is to 
+remain with just one peg left.</p>
+<p>For a roomful of programmers, no one so far has been able to solve the puzzle 
+(but then again, very few people have actually tried.)&nbsp; Watching one of my 
+coworkers futility go through various failed iterations, I had the obvious 
+thought -- write a program to find solutions to the puzzle!&nbsp; The second 
+obvious thought was, someone must have done this!&nbsp; Well, turns out, not 
+really.&nbsp; </p>
+<ul>
+	<li>There is a
+	<a href="https://www.codeproject.com/Articles/272466/Triangle-Peg-Solitaire">
+	Java article</a> here on CodeProject.</li>
+	<li>There's a <a href="https://gist.github.com/losvedir/661564">C program 
+	here</a> that solves the puzzle.</li>
+	<li>A nice C++ recursive algorithm
+	<a href="https://stackoverflow.com/questions/6393391/timeout-on-a-php-peg-puzzle-solver">
+	here</a>.</li>
+	<li>And a PHP solver
+	<a href="https://bitbucket.org/rcourtie/peg-solitaire/src/tip/peg-solitaire.php?fileviewer=file-view-default">
+	here</a>.</li>
+</ul>
+<p>OK, so while there are several solutions, I actually didn't find one in C#, 
+and even if I had, there is a certain pleasure in writing something like this 
+oneself, even if it's been done before.&nbsp; And of course, one can challenge 
+oneself to write the code as elegantly and efficiently as possible, etc.</p>
+<p>So the solution I present here:</p>
+<ul>
+	<li>Has a couple funky extension methods which may or may not make the code 
+	more readable.</li>
+	<li>Uses a lot of Linq.</li>
+	<li>Embeds <a href="https://www.codeproject.com/Articles/1136050/FlowSharp">
+	FlowSharp</a> so you can watch the algorithm go through the process of 
+	finding a solution.</li>
+	<li>Let's you single step through the solution and watch each step so you 
+	can memorize the solution and impress your friends!</li>
+	<li>As with the actual cheap game, there are 3 different colored pegs -- 
+	yellow, blue, and red -- which the UI implements.</li>
+	<li>Implements three different algorithms so you can peruse the pros and 
+	cons of each:<ul>
+	<li>Iterative -- the search stack is handled as handled as an actual <code>Stack</code> 
+	object.</li>
+	<li>Recursive using <code>yield</code> -- the search stack is an artifact of recursion.</li>
+	<li>Recursive with callback -- again the search stack is an artifact of 
+	recursion.</li>
+</ul>
+	</li>
+	<li>Was fun to write!</li>
+</ul>
+<h2>The Game Board</h2>
+<p>A lot of the work is done up front by setting up collections that have 
+pre-determined all the possible &quot;hops&quot; from one &quot;cell&quot; to another.&nbsp; The 
+algorithm only needs to determine which of these &quot;hops&quot; is legal for the current 
+board configuration.</p>
+<h3>Extension Methods</h3>
+<p>I decided to borrow from Ruby to create an extension method that iterates on 
+an integer with an optional starting offset:</p>
+<pre>public static void ForEach(this int i, Action&lt;int&gt; action, int startIdx = 0)
+{
+  for (int n = startIdx; n &lt; i + startIdx; n++) action(n);
+}</pre>
+<p>You'll see that used next.</p>
+<h3>Data Structures</h3>
+<p>The basic data structures are the <code>Row</code> and <code>Cell</code>.</p>
+<h4>Row</h4>
+<p>The board consists of an array of rows:</p>
+<pre>protected Row[] rows;</pre>
+<p>which consist of an array of cells:</p>
+<pre>public class Row
+{
+  public Cell[] Cells { get; protected set; }
+
+  public Row(int numCells)
+  {
+    Cells = new Cell[numCells];
+    numCells.ForEach(n =&gt; Cells[n] = new Cell());
+  }
+}</pre>
+<p>Initialization of the game board embeds the rule that the number of cells is 
+equal to the 1-base index of the row number:</p>
+<pre>protected void InitializeRowsAndColumns(int numRows)
+{
+  rows = new Row[numRows];
+  numRows.ForEach(n =&gt; rows[n] = new Row(n + 1));
+}</pre>
+<h4>Cell</h4>
+<p>A cell consists of its state (empty or has a peg) and an initial random seed 
+of the peg color:</p>
+<pre>public class Cell
+{
+  public Color Color { get; set; }
+
+  // More semantically friendly:
+  public bool HasPeg { get { return state; } set { state = value; } }
+  public bool IsEmpty { get { return !state; } }
+
+  protected bool state;
+
+  private static Random rnd = new Random(DateTime.Now.Second);
+  private static Color[] colors = { Color.Red, Color.Blue, Color.Yellow };
+
+  public Cell()
+  {
+    Color = colors[rnd.Next(colors.Length)];
+  }
+}</pre>
+<p>Note the <code>HasPeg</code> and <code>IsEmpty</code> properties, which improve the code readability 
+in other methods, 
+rather than exposing <code>state</code>.&nbsp; Also note that the cell contains 
+a static Random instance and the collection of possible peg colors.</p>
+<h4>The Flat View</h4>
+<p>Except for initialization, the algorithm to solve the puzzle works with 
+integer indices of the cells, rather than their row/column location.&nbsp; Among 
+other things, this simplifies how possible hops are determined, as well as 
+updating the UI.&nbsp; It's a lot easier (and more performant) if you don't 
+constantly have to look up a cell state by it's row/column location.&nbsp; So 
+internally, the board maintains a flat view of all the cells:</p>
+<pre>protected List&lt;Cell&gt; flatView;</pre>
+<p>Initialization of the flat view is straightforward:</p>
+<pre>protected void InitializeFlatView()
+{
+  flatView = new List&lt;Cell&gt;();
+  rows.ForEach(r =&gt; r.Cells.ForEach(c =&gt; flatView.Add(c)));
+}</pre>
+<p>This illustrates an important point: there are often two or more ways to 
+model a structure, and depending on what you're doing, it's easier to work with 
+one model vs. another.&nbsp; We see this next, where initializing all the hops 
+is more readable if we work with the row/column model.</p>
+<h3>Working with Rows and Columns</h3>
+<p>A cell location (as a row/column) mapped to its index in the flat view 
+(above) is useful for initialization.&nbsp; The mapping is done with a 
+<code>dictionary</code>:</p>
+<pre>protected Dictionary&lt;Location, int&gt; cellToIndexMap;</pre>
+<p>but when we use a structure as the dictionary key, a simple way (without 
+writing comparison operators) is to represent the structure as a C# <code>struct</code> 
+rather than a <code>class</code>:</p>
+<pre>/// &lt;summary&gt;
+/// Struct, so it can be used as a value field for indexing a dictionary.
+/// &lt;/summary&gt;
+public struct Location
+{
+  public int Row { get; set; }
+  public int Column { get; set; }
+
+  public Location(int row, int column)
+  {
+    Row = row;
+    Column = column;
+  }
+}</pre>
+<p>Why?&nbsp; By using a struct, the key is compared <i>by value</i> as opposed 
+to <i>by reference.</i></p>
+<p>We then initialize map:</p>
+<pre>protected void InitializeCellToIndexMap()
+{
+  cellToIndexMap = new Dictionary&lt;Location, int&gt;();
+  int n = 0;
+  rows.ForEachWithIndex((r, ridx) =&gt; r.Cells.ForEachWithIndex((c, cidx) =&gt; cellToIndexMap[new Location(ridx, cidx)] = n++));
+}</pre>
+<p>This is used next.</p>
+<h3>Determining All Possible Hops</h3>
+<p>The workhorse of the algorithm depends on initializing a structure that 
+contains all possible hops (validity of the hop is checked later.)&nbsp; This 
+takes advantage of the cell location to index map that we created earlier.&nbsp; 
+Here we introduce the <code>Hop</code> class:</p>
+<pre>public class Hop
+{
+  public int FromCellIndex { get; protected set; }
+  public int ToCellIndex { get; protected set; }
+  public int HoppedCellIndex { get; protected set; }
+
+  public Color FromCellColor { get; set; }
+  public Color HoppedCellColor { get; set; }
+  public Color ToCellColor { get; set; }
+
+  public Hop(int from, int to, int hopped)
+  {
+    FromCellIndex = from;
+    ToCellIndex = to;
+    HoppedCellIndex = hopped;
+  }
+
+  /// &lt;summary&gt;
+  /// We clone the Hop so that the color state is preserved for this *specific* hop.
+  /// Otherwise, the Hop instance might be re-used in a later iteration and the previous
+  /// Hop instance's color state will be overwritten by the new hop.
+  /// &lt;/summary&gt;
+  /// &lt;returns&gt;&lt;/returns&gt;
+  public Hop Clone()
+  {
+    Hop hop = new Hop(FromCellIndex, ToCellIndex, HoppedCellIndex);
+
+    return hop;
+  }
+
+  public override string ToString()
+  {
+    string ret = &quot;Finished!&quot;;
+
+    if (FromCellIndex != -1)
+    {
+      ret = FromCellIndex.ToString() + &quot; to &quot; + ToCellIndex.ToString() + &quot; over &quot; + HoppedCellIndex.ToString();
+    }
+
+    return ret;
+  }
+}</pre>
+<p>Notice a few things about the <code>Hop</code> class:</p>
+<ul>
+	<li>A hop knows its from, to, and cell hopped over indices.</li>
+<li>A hop preserves the state of the peg colors involved in the hop.&nbsp; We'll 
+see later that these colors are assigned when a hop is made based on the current 
+game board state.</li>
+	<li>Notice the <code>Clone</code> method.&nbsp; In the board's model, there 
+	is only one instance of each possible hop.&nbsp; However, because a hop 
+	preserves color state information, we need a cloned instance for the reason 
+	that the comment states.</li>
+	<li>The <code>ToString()</code> method gives us an easy way to display the solution in a 
+	<code>ListBox</code> of hops.</li>
+</ul>
+<p><img border="0" src="trivia.png" width="120" height="103">The issue of 
+preserving color was actually the hardest bug to solve.&nbsp; It took me quite a 
+while to realize that the Hop instance was being re-used for multiple 
+iterations, thus overwriting the colors of a previous iteration!</p>
+<p>Initializing all the possible hops populates the <code>List&lt;Hop&gt; allHops</code> structure:</p>
+<pre>protected void InitializeAllHops()
+{
+  // The idea here is to allow for diagonal down-left and down-right hops and left-to-right hops.
+  allHops = new List&lt;Hop&gt;();
+  rows.ForEachWithIndex((r, ridx) =&gt;
+  {
+    r.Cells.ForEachWithIndex((c, cidx) =&gt;
+    {
+      AddHorizontalHop(r, ridx, cidx);
+
+      // Check for valid diagonal hop, which is any hop downward where the target cell exists.
+      if (rows.Length &gt; ridx + 2)
+      {
+        AddDiagonalLeftHop(r, ridx, cidx);
+        AddDiagonalRightHop(r, ridx, cidx);
+      }
+    });
+  });
+}
+
+protected void AddHorizontalHop(Row r, int ridx, int cidx)
+{
+  if (r.Cells.Length &gt; cidx + 2)
+  {
+    int fromIdx = GetIndex(ridx, cidx);
+    int toIdx = GetIndex(ridx, cidx + 2);
+    int hopIdx = GetIndex(ridx, cidx + 1);
+    AddHop(fromIdx, toIdx, hopIdx);
+  }
+}
+
+protected void AddDiagonalLeftHop(Row r, int ridx, int cidx)
+{
+  // Note that the column index stay constant.
+  int fromIdx = GetIndex(ridx, cidx);
+  int toIdx = GetIndex(ridx + 2, cidx);
+  int hopIdx = GetIndex(ridx + 1, cidx);
+  AddHop(fromIdx, toIdx, hopIdx);
+}
+
+protected void AddDiagonalRightHop(Row r, int ridx, int cidx)
+{
+  // Note how the col index increments.
+  // We know that the column to the right always exists because it's a triangle!
+  int fromIdx = GetIndex(ridx, cidx);
+  int toIdx = GetIndex(ridx + 2, cidx + 2);
+  int hopIdx = GetIndex(ridx + 1, cidx + 1);
+  AddHop(fromIdx, toIdx, hopIdx);
+}</pre>
+<p>And because hops can be performed &quot;forward&quot; and &quot;backwards&quot;:</p>
+<pre>/// &lt;summary&gt;
+/// Add both &quot;forward&quot; and &quot;backward&quot; hop.
+/// &lt;/summary&gt;
+protected void AddHop(int fromIdx, int toIdx, int hopIdx)
+{
+  allHops.Add(new Hop(fromIdx, toIdx, hopIdx));
+  allHops.Add(new Hop(toIdx, fromIdx, hopIdx));
+}</pre>
+<p>The method GetIndex asserts that the index can be obtained for the 
+row/column by verifying the existence of the map key:</p>
+<pre>public int GetIndex(int row, int col)
+{
+  int idx;
+  bool found = cellToIndexMap.TryGetValue(new Location(row, col), out idx);
+  Assert.That(found, string.Format(&quot;Location at {0}, {1} does not exist.&quot;, row, col));
+
+  return idx;
+}</pre>
+<h3>Getting Allowed Hops</h3>
+<p>This is a fun Linq expression that joins the flat view index with the 
+fromCellIndex of all possible hops and filtering the return for only &quot;from&quot; 
+cells where the &quot;to&quot; cell is empty and the cell being hopped over has a peg:</p>
+<pre>public List&lt;Hop&gt; GetAllowedHops()
+{
+  // For each possible cell...
+  // where the cell has a peg...
+  // we have the index of the cell...
+  // and join with hops having a &quot;from&quot; index of the cells with pegs...
+  // and the hop has a &quot;to&quot; that is empty and a hopped cell that has a peg.
+  // and clone the hops, because we need to preserve color state information for the specific hop,
+  // as the exact hop may occur again in a later iteration.
+
+  var allowedHops = Enumerable.Range(0, flatView.Count()).
+    Where(n =&gt; flatView[n].HasPeg).
+    Join(allHops, pegIdx =&gt; pegIdx, hop =&gt; hop.FromCellIndex, (pegIdx, hop) =&gt; hop).
+    Where(hop =&gt; flatView[hop.ToCellIndex].IsEmpty &amp;&amp; flatView[hop.HoppedCellIndex].HasPeg).
+    Select(hop =&gt; hop.Clone()).ToList();
+
+  return allowedHops;
+}</pre>
+<h3>Doing and Undoing Hops</h3>
+<p>Lastly, the Board class provides the methods for performing a hop, or undoing 
+a hop.&nbsp; Undoing a hop is necessary when unwinding the collection of hops 
+for a failed solution, which we'll look at in the algorithm section.</p>
+<pre>	/// &lt;summary&gt;
+/// Move a peg to the empty &quot;to&quot; cell, removing the peg hopped over.
+/// &lt;/summary&gt;
+/// &lt;param name=&quot;hop&quot;&gt;&lt;/param&gt;
+public void HopPeg(Hop hop)
+{
+  Assert.That(flatView[hop.FromCellIndex].HasPeg, &quot;Expected from cell to be have a peg.&quot;);
+  Assert.That(flatView[hop.ToCellIndex].IsEmpty, &quot;Expected to cell to be empty.&quot;);
+  Assert.That(flatView[hop.HoppedCellIndex].HasPeg, &quot;Expected to cell have a peg.&quot;);
+
+  // Perform hop. From cell is emptied, cell being hopped is emptied, to cell is occupied.
+  flatView[hop.FromCellIndex].HasPeg = false;
+  flatView[hop.HoppedCellIndex].HasPeg = false;
+  flatView[hop.ToCellIndex].HasPeg = true;
+
+  // Save color state of from/hopped/to cells
+  hop.FromCellColor = flatView[hop.FromCellIndex].Color;
+  hop.HoppedCellColor = flatView[hop.HoppedCellIndex].Color;
+  hop.ToCellColor = flatView[hop.ToCellIndex].Color;
+
+  // Update color of To with color of From.
+  flatView[hop.ToCellIndex].Color = hop.FromCellColor;
+
+  DoHop.Fire(this, new CellChangeEventArgs() { Hop = hop, State = true });
+}
+
+/// &lt;summary&gt;
+/// The reverse process, restores pegs in the to cell, hopped cell, and removes the peg in the from cell.
+/// &lt;/summary&gt;
+public void UndoHopPeg(Hop hop)
+{
+  Assert.That(flatView[hop.FromCellIndex].IsEmpty, &quot;Expected from cell to be empty.&quot;);
+  Assert.That(flatView[hop.ToCellIndex].HasPeg, &quot;Expected to cell to have a peg.&quot;);
+  Assert.That(flatView[hop.HoppedCellIndex].IsEmpty, &quot;Expected to cell to be empty.&quot;);
+
+  flatView[hop.FromCellIndex].HasPeg = true;
+  flatView[hop.HoppedCellIndex].HasPeg = true;
+  flatView[hop.ToCellIndex].HasPeg = false;
+
+  // Restore colors
+  flatView[hop.FromCellIndex].Color = hop.FromCellColor;
+  flatView[hop.HoppedCellIndex].Color = hop.HoppedCellColor;
+  flatView[hop.ToCellIndex].Color = hop.ToCellColor;
+
+  UndoHop.Fire(this, new CellChangeEventArgs() { Hop = hop, State = false });
+}</pre>
+<p>Notice that we do some more assertions here, in case the algorithm asked the 
+board to perform an illegal operation.&nbsp; Also notice that we're managing the 
+peg color here, preserving the original color of the peg being hopped over.&nbsp; 
+Lastly, a couple events fire that are wired up by the UI:</p>
+<pre>public event EventHandler&lt;CellChangeEventArgs&gt; DoHop;
+public event EventHandler&lt;CellChangeEventArgs&gt; UndoHop;</pre>
+<p>We'll look at how the UI uses these events later on.</p>
+<h2>The Algorithm</h2>
+<p>As other implementations have stated, the algorithm is a Depth First Search (<a href="https://en.wikipedia.org/wiki/Depth-first_search">DSF</a>) 
+process.&nbsp; From the link:</p>
+<p><i>&quot;Depth-first search (DFS) is an algorithm for traversing or searching tree 
+or graph data structures. One starts at the root (selecting some arbitrary node 
+as the root in the case of a graph) and explores as far as possible along each 
+branch before backtracking.&quot;</i></p>
+<p>In our case, the &quot;root&quot; is all possible hops with just one empty cell.&nbsp; 
+After choosing a hop, all new allowable hops are determined, and the first one 
+is chosen.&nbsp; This process repeats until the puzzle is solved or no further 
+hops can be made.&nbsp; If no further hops can be made, the algorithm unwinds 
+one level and chooses the next hop of allowable hops.&nbsp; If there are no more 
+allowable hops, the algorithm unwinds again.&nbsp; This process is repeated 
+until it gets back to the root's allowable hops.&nbsp; If no solution has been 
+found at that point, the algorithm exits with &quot;no solution found.&quot;&nbsp; (Hint 
+-- all the possible starting positions are solvable.)</p>
+<h3>Data Structures</h3>
+<p>The following data structures are used.</p>
+<h4>HopOptions</h4>
+<p>This is a class that manages all allowable hops for a particular level (board 
+state) and sequencing through that list:</p>
+<pre>public class HopOptions
+{
+  protected List&lt;Hop&gt; hops;
+  protected int hopIdx;
+
+  public Hop CurrrentHop { get { return hops[hopIdx]; } }
+
+  public HopOptions(List&lt;Hop&gt; hops)
+  {
+    this.hops = hops;
+    hopIdx = 0;
+  }
+
+  public bool NextOptionIndex()
+  {
+    return ++hopIdx &lt; hops.Count;
+  }
+}</pre>
+<p>Note that when all the hop options have been exercised, <code>NextOptionIndex</code> 
+returns false, indicating that the stack needs to be unwound.</p>
+<h4>HopStack and UndoStack</h4>
+<p>The hop stack:</p>
+<pre>public Stack&lt;HopOptions&gt; HopStack { get; protected set; }</pre>
+<p>maintains the current state of the search algorithm, as a stack.&nbsp; When a 
+hop is made, the hop options for the new board state are pushed onto this stack.&nbsp; 
+When all the possible hops at this level have been exercised, the stack is 
+popped.</p>
+<p>The undo stack:</p>
+<pre>public Stack&lt;Hop&gt; UndoStack { get; protected set; }</pre>
+<p>is a different representation of the <code>HopStack</code>.&nbsp; The <code>UndoStack</code> tracks the 
+current hop that has been taken.&nbsp; The undo stack could be determined from 
+the <code>HopStack</code> and its current index, so this model is a convenience -- it 
+represents the current path through the <code>HopStack</code>.</p>
+<h3>To Iterate or to Recurse?</h3>
+<p>You might surmise at this point, since I'm utilizing actual <code>Stack</code> 
+collections, that the algorithm is iterative rather than recursive.&nbsp; A 
+recursive algorithm would utilize the actual program stack for maintaining 
+state.&nbsp; The reason for this is so that we can easily implement a &quot;single 
+step&quot; behavior.&nbsp; A recursive algorithm is not amenable to single stepping 
+through each permutation because it would have to exit all recursion levels and 
+then re-enter them magically to continue with the next step.</p>
+<h4>What about the Yield operator?</h4>
+<p>This is definitely a possibility.&nbsp; For example, this code:</p>
+<pre>static void Main(string[] args)
+{
+  YieldTest(0).ForEach(n =&gt; Console.WriteLine(n));
+}
+
+static IEnumerable&lt;int&gt; YieldTest(int n)
+{
+  yield return n;
+
+  if (++n &lt; 5)
+  {
+    foreach (int q in YieldTest(n))
+    {
+      yield return q;
+    }
+  }
+}</pre>
+<p>prints &quot;0 1 2 3 4&quot; and demonstrates how each iteration can be &quot;stepped&quot; by 
+iterating through the enumerator.</p>
+<h4>What about a Step-And-Continue callback?</h4>
+<p>A callback for each recursive call would allow the handler to suspend and 
+wait for user input stepper, and unlike the <code>yield</code> operator, has the advantage of 
+being able to return a &quot;cancel&quot; flag.</p>
+<p>Because this is one of those &quot;let's have fun&quot; articles, I'll show you how 
+iteration, recursion with yield, and recursion with a step-and-continue callback 
+works.</p>
+<h3>Iterative Algorithm</h3>
+<p>The iterative algorithm is actually the easiest to implement when dealing 
+with the single step option.&nbsp; It implements the <code>Run</code> method.</p>
+<h4>Run</h4>
+<pre>public override void Run()
+{
+  while (board.RemainingPegs &gt; 1 &amp;&amp; Step())
+  {
+    Hop hop = PushHop();
+    board.HopPeg(hop);
+  }
+
+  Solved = board.RemainingPegs == 1;
+}</pre>
+<p>which does little more than single step through each iteration, pushing state 
+information as it goes along.</p>
+<h4>PushHop</h4>
+<p>Because we are maintaining our own stack (as opposed to a recursive algorithm 
+that maintains the stack as local variables on the program stack), we need to 
+push our current state onto our two stack model representations (the <code>HopStack</code> 
+and the <code>UndoStack</code>):</p>
+<pre>public override Hop PushHop()
+{
+  Hop hop = HopStack.Peek().CurrrentHop;
+  UndoStack.Push(hop);
+
+  return hop;
+}</pre>
+<h4>Step</h4>
+<p>The <code>Step</code> method is where the iteration is implemented, in the 
+sense that it attempts each possible hop, and when no further hops are possible, 
+the stack is unwound.</p>
+<pre>public override bool Step()
+{
+  bool next = true;
+  List&lt;Hop&gt; allowedHops = board.GetAllowedHops();
+
+  if (allowedHops.Count == 0)
+  {
+    // No solution. Unwind.
+    next = Unwind();
+  }
+  else
+  {
+    HopOptions hopOptions = new HopOptions(allowedHops);
+    HopStack.Push(hopOptions);
+  }
+
+  return next;
+}</pre>
+<h4>Unwind</h4>
+<p>When the algorithm cannot move forward anymore, the stacks are unwound until 
+there are more forward iterations possible:</p>
+<pre>protected bool Unwind()
+{
+  bool more = false;
+
+  while (!more &amp;&amp; HopStack.Count &gt; 0)
+  {
+    Hop undoHop = UndoStack.Pop();
+    board.UndoHopPeg(undoHop);
+    more = HopStack.Peek().NextOptionIndex();
+
+    if (!more)
+    {
+      HopStack.Pop();
+    }
+  }
+
+  return more;
+}</pre>
+<h3>The Recursive Yield Algorithm</h3>
+<p>The recursive yield algorithm is much simpler!</p>
+<h4>Run</h4>
+<pre>public override void Run()
+{
+  foreach(Hop hop in Step(new HopOptions(board.GetAllowedHops())))
+  {
+    board.HopPeg(hop);
+    Solved = board.RemainingPegs == 1;
+
+    if (Solved)
+    {
+      // It's amazing how we can break out of a recursive yield!
+      // But that's actually because the yield operator flattens 
+      // the recursion into iteration!
+      break;
+    }
+  }
+}</pre>
+<p>The neat thing here is that the stepper method <code>Step</code> returns an <code>IEnumerable&lt;Hop&gt;</code>, 
+so all the <code>Run</code> method has to do is iterate through the enumeration until a 
+solution is found.&nbsp; Note the comment.</p>
+<h4>Step</h4>
+<pre>protected IEnumerable&lt;Hop&gt; Step(HopOptions hopOptions)
+{
+  while (hopOptions.OptionAvailable)
+  {
+    Hop hop = hopOptions.CurrrentHop;
+    UndoStack.Push(hop);
+    yield return hop;
+
+    List&lt;Hop&gt; allowedHops = board.GetAllowedHops();
+
+    foreach (Hop nextHop in Step(new HopOptions(allowedHops)))
+    {
+      yield return nextHop;
+    }
+
+    UndoStack.Pop();
+    board.UndoHopPeg(hop);
+    hopOptions.NextOptionIndex();
+  }
+}</pre>
+<p>The stepper, because it's implemented as a recursive algorithm, doesn't need 
+to maintain a separate stack -- the recursion passing in the <code>HopOptions 
+hopOptions</code> lets the program stack implement what, in the iterative algorithm, 
+was handled by the <code>Stack&lt;HopOptions&gt; HopStack</code>.&nbsp; Note that 
+we are still implementing the <code>UndoStack</code> push/pop, as this is a separate model 
+for the convenience of the UI.</p>
+<p>As the comment earlier mentioned, the neat thing about the <code>yield</code> operator is 
+that it flattens the recursion -- the code looks like recursion, but it actually 
+ends up implementing iteration.</p>
+<h2>The Visual Game Board</h2>
+<p>&nbsp;</p>
+<p>&nbsp;</p>
+<p>&nbsp;</p>
+<p>&nbsp;</p>
+<p>&nbsp;</p>
+
+</body>
+
+</html>
