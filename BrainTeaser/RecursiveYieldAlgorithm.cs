@@ -26,6 +26,7 @@ namespace BrainTeaser
 		{
 			foreach(Hop hop in Step(new HopOptions(board.GetAllowedHops())))
 			{
+				++Iterations;
 				board.HopPeg(hop);
 				Solved = board.RemainingPegs == 1;
 
@@ -49,6 +50,7 @@ namespace BrainTeaser
 
 		public override bool Step()
 		{
+			++Iterations;
 			bool ret = hopEnumerator.MoveNext();
 
 			if (ret)

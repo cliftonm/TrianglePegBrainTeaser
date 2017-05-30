@@ -35,6 +35,7 @@ namespace BrainTeaser
 
 		public override bool Step()
 		{
+			++Iterations;
 			bool next = true;
 			List<Hop> allowedHops = board.GetAllowedHops();
 

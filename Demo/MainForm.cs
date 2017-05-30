@@ -106,6 +106,7 @@ namespace Demo
 			if (running)
 			{
 				lbSolution.DataSource = algorithm.UndoStack.Reverse().ToList();
+				tbIterations.Text = algorithm.Iterations.ToString("#,###,##0");
 				Application.DoEvents();
 				System.Threading.Thread.Sleep(tbIterateDelay.Text.to_i());
 			}
@@ -156,7 +157,7 @@ namespace Demo
 				RestoreBoard();
 				solutionHops.Add(new Hop(-1, 0, 0));     // Fake last entry so we can step to the actual 1 peg remaining.
 				lbSolution.DataSource = solutionHops;
-				// ShowPegs();
+				tbIterations.Text = algorithm.Iterations.ToString("#,###,##0");
 				solutionStep = 0;
 				ckShowUi.Checked = true;
 

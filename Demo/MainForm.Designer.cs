@@ -30,15 +30,17 @@
 		{
 			this.pnlFlowSharp = new System.Windows.Forms.Panel();
 			this.groupBox3 = new System.Windows.Forms.GroupBox();
+			this.ckShowUi = new System.Windows.Forms.CheckBox();
+			this.nudStartPosition = new System.Windows.Forms.NumericUpDown();
+			this.label3 = new System.Windows.Forms.Label();
 			this.btnSingleStep = new System.Windows.Forms.Button();
 			this.tbIterateDelay = new System.Windows.Forms.TextBox();
 			this.label2 = new System.Windows.Forms.Label();
 			this.label1 = new System.Windows.Forms.Label();
 			this.lbSolution = new System.Windows.Forms.ListBox();
 			this.btnStart = new System.Windows.Forms.Button();
-			this.label3 = new System.Windows.Forms.Label();
-			this.nudStartPosition = new System.Windows.Forms.NumericUpDown();
-			this.ckShowUi = new System.Windows.Forms.CheckBox();
+			this.label4 = new System.Windows.Forms.Label();
+			this.tbIterations = new System.Windows.Forms.TextBox();
 			this.groupBox3.SuspendLayout();
 			((System.ComponentModel.ISupportInitialize)(this.nudStartPosition)).BeginInit();
 			this.SuspendLayout();
@@ -55,6 +57,8 @@
 			// 
 			// groupBox3
 			// 
+			this.groupBox3.Controls.Add(this.tbIterations);
+			this.groupBox3.Controls.Add(this.label4);
 			this.groupBox3.Controls.Add(this.ckShowUi);
 			this.groupBox3.Controls.Add(this.nudStartPosition);
 			this.groupBox3.Controls.Add(this.label3);
@@ -70,6 +74,40 @@
 			this.groupBox3.TabIndex = 3;
 			this.groupBox3.TabStop = false;
 			this.groupBox3.Text = "Solutions:";
+			// 
+			// ckShowUi
+			// 
+			this.ckShowUi.AutoSize = true;
+			this.ckShowUi.Checked = true;
+			this.ckShowUi.CheckState = System.Windows.Forms.CheckState.Checked;
+			this.ckShowUi.Location = new System.Drawing.Point(195, 48);
+			this.ckShowUi.Name = "ckShowUi";
+			this.ckShowUi.Size = new System.Drawing.Size(37, 17);
+			this.ckShowUi.TabIndex = 8;
+			this.ckShowUi.Text = "UI";
+			this.ckShowUi.UseVisualStyleBackColor = true;
+			// 
+			// nudStartPosition
+			// 
+			this.nudStartPosition.Location = new System.Drawing.Point(83, 71);
+			this.nudStartPosition.Maximum = new decimal(new int[] {
+            14,
+            0,
+            0,
+            0});
+			this.nudStartPosition.Name = "nudStartPosition";
+			this.nudStartPosition.Size = new System.Drawing.Size(65, 20);
+			this.nudStartPosition.TabIndex = 7;
+			this.nudStartPosition.ValueChanged += new System.EventHandler(this.OnStartPositionChanged);
+			// 
+			// label3
+			// 
+			this.label3.AutoSize = true;
+			this.label3.Location = new System.Drawing.Point(7, 73);
+			this.label3.Name = "label3";
+			this.label3.Size = new System.Drawing.Size(32, 13);
+			this.label3.TabIndex = 6;
+			this.label3.Text = "Start:";
 			// 
 			// btnSingleStep
 			// 
@@ -110,9 +148,9 @@
 			// lbSolution
 			// 
 			this.lbSolution.FormattingEnabled = true;
-			this.lbSolution.Location = new System.Drawing.Point(7, 94);
+			this.lbSolution.Location = new System.Drawing.Point(7, 133);
 			this.lbSolution.Name = "lbSolution";
-			this.lbSolution.Size = new System.Drawing.Size(247, 368);
+			this.lbSolution.Size = new System.Drawing.Size(247, 329);
 			this.lbSolution.TabIndex = 1;
 			this.lbSolution.SelectedIndexChanged += new System.EventHandler(this.OnSolutionStepChanged);
 			// 
@@ -126,39 +164,23 @@
 			this.btnStart.UseVisualStyleBackColor = true;
 			this.btnStart.Click += new System.EventHandler(this.btnRun_Click);
 			// 
-			// label3
+			// label4
 			// 
-			this.label3.AutoSize = true;
-			this.label3.Location = new System.Drawing.Point(7, 73);
-			this.label3.Name = "label3";
-			this.label3.Size = new System.Drawing.Size(32, 13);
-			this.label3.TabIndex = 6;
-			this.label3.Text = "Start:";
+			this.label4.AutoSize = true;
+			this.label4.Location = new System.Drawing.Point(7, 101);
+			this.label4.Name = "label4";
+			this.label4.Size = new System.Drawing.Size(53, 13);
+			this.label4.TabIndex = 9;
+			this.label4.Text = "Iterations:";
 			// 
-			// nudStartPosition
+			// tbIterations
 			// 
-			this.nudStartPosition.Location = new System.Drawing.Point(83, 71);
-			this.nudStartPosition.Maximum = new decimal(new int[] {
-            14,
-            0,
-            0,
-            0});
-			this.nudStartPosition.Name = "nudStartPosition";
-			this.nudStartPosition.Size = new System.Drawing.Size(65, 20);
-			this.nudStartPosition.TabIndex = 7;
-			this.nudStartPosition.ValueChanged += new System.EventHandler(this.OnStartPositionChanged);
-			// 
-			// ckShowUi
-			// 
-			this.ckShowUi.AutoSize = true;
-			this.ckShowUi.Checked = true;
-			this.ckShowUi.CheckState = System.Windows.Forms.CheckState.Checked;
-			this.ckShowUi.Location = new System.Drawing.Point(195, 48);
-			this.ckShowUi.Name = "ckShowUi";
-			this.ckShowUi.Size = new System.Drawing.Size(37, 17);
-			this.ckShowUi.TabIndex = 8;
-			this.ckShowUi.Text = "UI";
-			this.ckShowUi.UseVisualStyleBackColor = true;
+			this.tbIterations.Location = new System.Drawing.Point(83, 98);
+			this.tbIterations.Name = "tbIterations";
+			this.tbIterations.ReadOnly = true;
+			this.tbIterations.Size = new System.Drawing.Size(65, 20);
+			this.tbIterations.TabIndex = 10;
+			this.tbIterations.Text = "0";
 			// 
 			// MainForm
 			// 
@@ -189,6 +211,8 @@
 		private System.Windows.Forms.NumericUpDown nudStartPosition;
 		private System.Windows.Forms.Label label3;
 		private System.Windows.Forms.CheckBox ckShowUi;
+		private System.Windows.Forms.TextBox tbIterations;
+		private System.Windows.Forms.Label label4;
 	}
 }
 

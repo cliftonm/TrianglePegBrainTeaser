@@ -6,6 +6,7 @@ namespace BrainTeaser
 	{
 		public Stack<Hop> UndoStack { get; protected set; }
 		public bool Solved { get; protected set; }
+		public int Iterations { get; protected set; }
 
 		protected Board board;
 
@@ -23,6 +24,7 @@ namespace BrainTeaser
 		public virtual void Initialize(int startCellIdx)
 		{
 			Solved = false;
+			Iterations = 0;
 			int numPegs = board.NumCells;
 
 			// Start with one peg removed.
