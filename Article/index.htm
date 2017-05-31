@@ -37,10 +37,12 @@ really.&nbsp; </p>
 <p>OK, so while there are several solutions, I actually didn't find one in C#, 
 and even if I had, there is a certain pleasure in writing something like this 
 oneself, even if it's been done before.&nbsp; And of course, one can challenge 
-oneself to write the code as elegantly and efficiently as possible, etc.</p>
+oneself to write the code as elegantly and efficiently as possible, etc.&nbsp; </p>
+<p><img border="0" src="wayoverboard.jpg" width="120" height="119">And as is apt 
+to occur, I went way overboard.</p>
 <p>So the solution I present here:</p>
 <ul>
-	<li>Has a couple funky extension methods which may or may not make the code 
+	<li>Has a funky extension method which may or may not make the code 
 	more readable.</li>
 	<li>Uses a lot of Linq.</li>
 	<li>Embeds <a href="https://www.codeproject.com/Articles/1136050/FlowSharp">
@@ -808,7 +810,8 @@ first time, you'll probably see this:</p>
 and click on Allow access.&nbsp; There isn't anything else nasty going on.</p>
 <p>(ok, that's bizarre.&nbsp; The above image is Copyright 2004 by Melissa <i>
 Clifton</i>.&nbsp; No relation that I know of!&nbsp; Also, explicit permission 
-to use that image has been given.)</p>
+to use that image has been given.&nbsp; Visit
+<a href="http://www.melissaevans.com/">her website</a>!)</p>
 <h4>Step 4: Drawing the Pegs</h4>
 <p>Lastly, we draw the pegs:</p>
 <pre>protected void ShowPegs()
@@ -984,6 +987,7 @@ your friends!</p>
 
   while (newSolStep &lt; solutionStep)
   {
+    // Move trans-dimensionally through the solution steps.
     board.UndoHopPeg(solutionHops[--solutionStep]);
   }
 }</pre>
@@ -1002,7 +1006,8 @@ your friends!</p>
   DrawBoard();
   ShowPegs();
 }</pre>
-<p><img border="0" src="justKidding.jpg" width="120" height="67"> Just kidding!&nbsp; OK, I overcame my laziness:</p>
+<p><img border="0" src="justKidding.jpg" width="120" height="67"> Just kidding!&nbsp; I overcame my laziness 
+(this article has taken way too long, haha):</p>
 <p><img border="0" src="ui3.png" width="268" height="154"></p>
 <pre>protected void OnSelectedIndexChanged(object sender, EventArgs e)
 {
@@ -1026,11 +1031,13 @@ your friends!</p>
 <p>Didn't think so.&nbsp; I suppose you were expecting a <code>switch</code> statement?&nbsp; 
 From me???</p>
 <h2>Conclusion</h2>
-<p>As usual, the code took about 3 hours to write, the article about 8 hours.&nbsp; 
+<p>As usual, while the code took about 3 hours to write, the article took 3 
+times longer!&nbsp; 
 Good grief.</p>
 <p>On the other hand, I think one of the coolest things about what I've 
 presented here are the three different algorithms: iteration, recursive yield, 
-and recursive step-and-continue.</p>
+and recursive step-and-continue, and as usual, in writing the article, a lot of 
+code cleanup occurred!</p>
 
 </body>
 
