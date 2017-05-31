@@ -57,6 +57,7 @@
     <Compile Include="IterativeAlgorithm.cs" />
     <Compile Include="HopOptions.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="RecursiveStepAndContinueAlgorithm.cs" />
     <Compile Include="RecursiveYieldAlgorithm.cs" />
   </ItemGroup>
   <ItemGroup>

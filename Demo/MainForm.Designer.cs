@@ -30,6 +30,10 @@
 		{
 			this.pnlFlowSharp = new System.Windows.Forms.Panel();
 			this.groupBox3 = new System.Windows.Forms.GroupBox();
+			this.cbAlgorithm = new System.Windows.Forms.ComboBox();
+			this.label5 = new System.Windows.Forms.Label();
+			this.tbIterations = new System.Windows.Forms.TextBox();
+			this.label4 = new System.Windows.Forms.Label();
 			this.ckShowUi = new System.Windows.Forms.CheckBox();
 			this.nudStartPosition = new System.Windows.Forms.NumericUpDown();
 			this.label3 = new System.Windows.Forms.Label();
@@ -39,8 +43,6 @@
 			this.label1 = new System.Windows.Forms.Label();
 			this.lbSolution = new System.Windows.Forms.ListBox();
 			this.btnStart = new System.Windows.Forms.Button();
-			this.label4 = new System.Windows.Forms.Label();
-			this.tbIterations = new System.Windows.Forms.TextBox();
 			this.groupBox3.SuspendLayout();
 			((System.ComponentModel.ISupportInitialize)(this.nudStartPosition)).BeginInit();
 			this.SuspendLayout();
@@ -57,6 +59,8 @@
 			// 
 			// groupBox3
 			// 
+			this.groupBox3.Controls.Add(this.cbAlgorithm);
+			this.groupBox3.Controls.Add(this.label5);
 			this.groupBox3.Controls.Add(this.tbIterations);
 			this.groupBox3.Controls.Add(this.label4);
 			this.groupBox3.Controls.Add(this.ckShowUi);
@@ -75,12 +79,53 @@
 			this.groupBox3.TabStop = false;
 			this.groupBox3.Text = "Solutions:";
 			// 
+			// cbAlgorithm
+			// 
+			this.cbAlgorithm.FormattingEnabled = true;
+			this.cbAlgorithm.Items.AddRange(new object[] {
+            "Iterative",
+            "Recursive Yield",
+            "Recursive Step and Continue"});
+			this.cbAlgorithm.Location = new System.Drawing.Point(83, 20);
+			this.cbAlgorithm.Name = "cbAlgorithm";
+			this.cbAlgorithm.Size = new System.Drawing.Size(171, 21);
+			this.cbAlgorithm.TabIndex = 12;
+			this.cbAlgorithm.Text = "Iterative";
+			this.cbAlgorithm.SelectedIndexChanged += new System.EventHandler(this.OnSelectedIndexChanged);
+			// 
+			// label5
+			// 
+			this.label5.AutoSize = true;
+			this.label5.Location = new System.Drawing.Point(7, 23);
+			this.label5.Name = "label5";
+			this.label5.Size = new System.Drawing.Size(53, 13);
+			this.label5.TabIndex = 11;
+			this.label5.Text = "Algorithm:";
+			// 
+			// tbIterations
+			// 
+			this.tbIterations.Location = new System.Drawing.Point(83, 124);
+			this.tbIterations.Name = "tbIterations";
+			this.tbIterations.ReadOnly = true;
+			this.tbIterations.Size = new System.Drawing.Size(65, 20);
+			this.tbIterations.TabIndex = 10;
+			this.tbIterations.Text = "0";
+			// 
+			// label4
+			// 
+			this.label4.AutoSize = true;
+			this.label4.Location = new System.Drawing.Point(7, 127);
+			this.label4.Name = "label4";
+			this.label4.Size = new System.Drawing.Size(53, 13);
+			this.label4.TabIndex = 9;
+			this.label4.Text = "Iterations:";
+			// 
 			// ckShowUi
 			// 
 			this.ckShowUi.AutoSize = true;
 			this.ckShowUi.Checked = true;
 			this.ckShowUi.CheckState = System.Windows.Forms.CheckState.Checked;
-			this.ckShowUi.Location = new System.Drawing.Point(195, 48);
+			this.ckShowUi.Location = new System.Drawing.Point(195, 74);
 			this.ckShowUi.Name = "ckShowUi";
 			this.ckShowUi.Size = new System.Drawing.Size(37, 17);
 			this.ckShowUi.TabIndex = 8;
@@ -89,7 +134,7 @@
 			// 
 			// nudStartPosition
 			// 
-			this.nudStartPosition.Location = new System.Drawing.Point(83, 71);
+			this.nudStartPosition.Location = new System.Drawing.Point(83, 97);
 			this.nudStartPosition.Maximum = new decimal(new int[] {
             14,
             0,
@@ -103,7 +148,7 @@
 			// label3
 			// 
 			this.label3.AutoSize = true;
-			this.label3.Location = new System.Drawing.Point(7, 73);
+			this.label3.Location = new System.Drawing.Point(7, 99);
 			this.label3.Name = "label3";
 			this.label3.Size = new System.Drawing.Size(32, 13);
 			this.label3.TabIndex = 6;
@@ -111,7 +156,7 @@
 			// 
 			// btnSingleStep
 			// 
-			this.btnSingleStep.Location = new System.Drawing.Point(88, 19);
+			this.btnSingleStep.Location = new System.Drawing.Point(88, 45);
 			this.btnSingleStep.Name = "btnSingleStep";
 			this.btnSingleStep.Size = new System.Drawing.Size(75, 23);
 			this.btnSingleStep.TabIndex = 5;
@@ -121,7 +166,7 @@
 			// 
 			// tbIterateDelay
 			// 
-			this.tbIterateDelay.Location = new System.Drawing.Point(83, 46);
+			this.tbIterateDelay.Location = new System.Drawing.Point(83, 72);
 			this.tbIterateDelay.Name = "tbIterateDelay";
 			this.tbIterateDelay.Size = new System.Drawing.Size(65, 20);
 			this.tbIterateDelay.TabIndex = 4;
@@ -130,7 +175,7 @@
 			// label2
 			// 
 			this.label2.AutoSize = true;
-			this.label2.Location = new System.Drawing.Point(153, 49);
+			this.label2.Location = new System.Drawing.Point(153, 75);
 			this.label2.Name = "label2";
 			this.label2.Size = new System.Drawing.Size(20, 13);
 			this.label2.TabIndex = 3;
@@ -139,7 +184,7 @@
 			// label1
 			// 
 			this.label1.AutoSize = true;
-			this.label1.Location = new System.Drawing.Point(7, 49);
+			this.label1.Location = new System.Drawing.Point(7, 75);
 			this.label1.Name = "label1";
 			this.label1.Size = new System.Drawing.Size(70, 13);
 			this.label1.TabIndex = 2;
@@ -148,39 +193,21 @@
 			// lbSolution
 			// 
 			this.lbSolution.FormattingEnabled = true;
-			this.lbSolution.Location = new System.Drawing.Point(7, 133);
+			this.lbSolution.Location = new System.Drawing.Point(7, 159);
 			this.lbSolution.Name = "lbSolution";
-			this.lbSolution.Size = new System.Drawing.Size(247, 329);
+			this.lbSolution.Size = new System.Drawing.Size(247, 303);
 			this.lbSolution.TabIndex = 1;
 			this.lbSolution.SelectedIndexChanged += new System.EventHandler(this.OnSolutionStepChanged);
 			// 
 			// btnStart
 			// 
-			this.btnStart.Location = new System.Drawing.Point(7, 20);
+			this.btnStart.Location = new System.Drawing.Point(7, 46);
 			this.btnStart.Name = "btnStart";
 			this.btnStart.Size = new System.Drawing.Size(75, 23);
 			this.btnStart.TabIndex = 0;
 			this.btnStart.Text = "Run";
 			this.btnStart.UseVisualStyleBackColor = true;
 			this.btnStart.Click += new System.EventHandler(this.btnRun_Click);
-			// 
-			// label4
-			// 
-			this.label4.AutoSize = true;
-			this.label4.Location = new System.Drawing.Point(7, 101);
-			this.label4.Name = "label4";
-			this.label4.Size = new System.Drawing.Size(53, 13);
-			this.label4.TabIndex = 9;
-			this.label4.Text = "Iterations:";
-			// 
-			// tbIterations
-			// 
-			this.tbIterations.Location = new System.Drawing.Point(83, 98);
-			this.tbIterations.Name = "tbIterations";
-			this.tbIterations.ReadOnly = true;
-			this.tbIterations.Size = new System.Drawing.Size(65, 20);
-			this.tbIterations.TabIndex = 10;
-			this.tbIterations.Text = "0";
 			// 
 			// MainForm
 			// 
@@ -213,6 +240,8 @@
 		private System.Windows.Forms.CheckBox ckShowUi;
 		private System.Windows.Forms.TextBox tbIterations;
 		private System.Windows.Forms.Label label4;
+		private System.Windows.Forms.ComboBox cbAlgorithm;
+		private System.Windows.Forms.Label label5;
 	}
 }
 

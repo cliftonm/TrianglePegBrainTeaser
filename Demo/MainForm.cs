@@ -46,7 +46,7 @@ namespace Demo
 			canvasService.ActiveController.Canvas.Invalidate();
 
 			// Initialize Toolbox so we can drop shapes
-			IFlowSharpToolboxService toolboxService = Program.ServiceManager.Get<IFlowSharpToolboxService>();
+			var toolboxService = Program.ServiceManager.Get<IFlowSharpToolboxService>();
 
 			// We don't display the toolbox, but we need a container.
 			Panel pnlToolbox = new Panel();
@@ -63,8 +63,9 @@ namespace Demo
 		protected void OnShown(object sender, EventArgs e)
 		{
 			board = new Board(NUM_ROWS);
-			// algorithm = new IterativeAlgorithm(board);
-			algorithm = new RecursiveYieldAlgorithm(board);
+			algorithm = new IterativeAlgorithm(board);
+			// algorithm = new RecursiveYieldAlgorithm(board);
+			// algorithm = new RecursiveStepAndContinueAlgorithm(board);
 			board.DoHop += OnHop;
 			board.UndoHop += OnUndoHop;
 
@@ -142,6 +143,7 @@ namespace Demo
 
 		private void btnRun_Click(object sender, EventArgs e)
 		{
+			singleStepping = false;
 			ShowPegs();
 			algorithm.Initialize(startPosition);
 			running = true;
@@ -196,8 +198,7 @@ namespace Demo
 
 			while (newSolStep < solutionStep)
 			{
-				board.UndoHopPeg(solutionHops[solutionStep-1]);
-				--solutionStep;
+				board.UndoHopPeg(solutionHops[--solutionStep]);
 			}
 		}
 
@@ -208,12 +209,14 @@ namespace Demo
 
 			if (!singleStepping)
 			{
+				running = false;
 				ShowPegs();
 				algorithm.Initialize(startPosition);
 				algorithm.StartStepper();		// Used for yield recursion.
 			}
 
 			bool next = algorithm.Step();
+			tbIterations.Text = algorithm.Iterations.ToString("#,###,##0");
 
 			if (next)
 			{
@@ -224,10 +227,22 @@ namespace Demo
 			singleStepping = next || (board.RemainingPegs > 1 && next);
 		}
 
-		private void OnStartPositionChanged(object sender, EventArgs e)
+		protected void OnStartPositionChanged(object sender, EventArgs e)
 		{
 			startPosition = (int)nudStartPosition.Value;
 			ShowPegs();
+		}
+
+		protected void OnSelectedIndexChanged(object sender, EventArgs e)
+		{
+			algorithm = Activator.CreateInstance(new Type[]
+			{
+				typeof(IterativeAlgorithm),
+				typeof(RecursiveYieldAlgorithm),
+				typeof(RecursiveStepAndContinueAlgorithm)
+			}[cbAlgorithm.SelectedIndex], new object[] { board }) as Algorithm;
+
+			singleStepping = false;
 		}
 	}
 }

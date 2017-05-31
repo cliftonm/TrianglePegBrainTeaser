@@ -8,6 +8,7 @@
 
 <body>
 
+<p><img border="0" src="ui4.png" width="748" height="497"></p>
 <h2>Introduction</h2>
 <p>We have these brain teaser puzzles at work:</p>
 <p>We've probably all played them -- the idea being you start with one empty 
@@ -49,7 +50,7 @@ oneself to write the code as elegantly and efficiently as possible, etc.</p>
 	can memorize the solution and impress your friends!</li>
 	<li>As with the actual cheap game, there are 3 different colored pegs -- 
 	yellow, blue, and red -- which the UI implements.</li>
-	<li>Implements three different algorithms so you can peruse the pros and 
+	<li><b>Implements three different algorithms</b> so you can peruse the pros and 
 	cons of each:<ul>
 	<li>Iterative -- the search stack is handled as handled as an actual <code>Stack</code> 
 	object.</li>
@@ -482,7 +483,6 @@ with the single step option.&nbsp; It implements the <code>Run</code> method.</p
   while (board.RemainingPegs &gt; 1 &amp;&amp; Step())
   {
     Hop hop = PushHop();
-    board.HopPeg(hop);
   }
 
   Solved = board.RemainingPegs == 1;
@@ -497,6 +497,7 @@ and the <code>UndoStack</code>):</p>
 <pre>public override Hop PushHop()
 {
   Hop hop = HopStack.Peek().CurrrentHop;
+  board.HopPeg(hop);
   UndoStack.Push(hop);
 
   return hop;
@@ -595,13 +596,441 @@ we are still implementing the <code>UndoStack</code> push/pop, as this is a sepa
 for the convenience of the UI.</p>
 <p>As the comment earlier mentioned, the neat thing about the <code>yield</code> operator is 
 that it flattens the recursion -- the code looks like recursion, but it actually 
-ends up implementing iteration.</p>
-<h2>The Visual Game Board</h2>
-<p>&nbsp;</p>
-<p>&nbsp;</p>
-<p>&nbsp;</p>
-<p>&nbsp;</p>
-<p>&nbsp;</p>
+ends up implementing iteration.&nbsp; Read more:</p>
+<ul>
+	<li>
+	<a href="https://startbigthinksmall.wordpress.com/2008/06/09/behind-the-scenes-of-the-c-yield-keyword/">Lars Corneliussen - Behind the Scenes of the C# Yield Keyword</a></li>
+	<li>
+	<a href="https://docs.microsoft.com/en-us/dotnet/csharp/language-reference/keywords/yield">yield (C# Reference)</a> In particular, note this statement: 
+	<i>When you use the 
+yield keyword in a statement, you indicate that the method, operator, or get 
+accessor in which it appears is <b>an iterator</b>.</i> (my bolding.)</li>
+</ul>
+<h3>The Recursive Step and Continue Algorithm</h3>
+<p>This algorithm replaces the <code>yield</code> with a callback for updating the game board 
+at every iteration:</p>
+<pre>protected bool Step(HopOptions hopOptions, Func&lt;Hop, bool&gt; callback)
+{
+  while (hopOptions.OptionAvailable)
+  {
+    Hop hop = hopOptions.CurrrentHop;
+    UndoStack.Push(hop);
+
+    if (callback(hop))
+    {
+      return false;
+    }
+
+    List&lt;Hop&gt; allowedHops = board.GetAllowedHops();
+    bool cont = Step(new HopOptions(allowedHops), Callback);
+    
+    if (!cont)
+    {
+      return false;
+    }
+
+    UndoStack.Pop();
+    board.UndoHopPeg(hop);
+    hopOptions.NextOptionIndex();
+  }
+
+  return true;
+}</pre>
+<p>The inner <code>for</code> loop that the recursive yield algorithm used is also gone as 
+it's now unnecessary.&nbsp; Note however that we have to provide a mechanism for 
+unraveling the recursion when the algorithm is solved.&nbsp; (This is slight 
+confusing, because the callback returns true if the algorithm is solved, but the 
+stepper returns false if it's supposed to abort.</p>
+<h4>Run</h4>
+<p>Running the solver is a simple matter of:</p>
+<pre>public override void Run()
+{
+  Step(new HopOptions(board.GetAllowedHops()), Callback);
+}</pre>
+<p>The callback is the critical piece, as it returns true if the puzzle has been 
+solved:</p>
+<pre>/// &lt;summary&gt;
+/// Return true if a solution has been found, which cancels the recursion.
+/// &lt;/summary&gt;
+protected bool Callback(Hop hop)
+{
+  ++Iterations;
+  board.HopPeg(hop);
+  Solved = board.RemainingPegs == 1;
+
+  return Solved;
+}</pre>
+<p><img border="0" src="sneaky.png" width="120" height="95">&nbsp; Note that at 
+this point, I added an iteration counter to all the algorithms.</p>
+<h4>The Complexity of Single Stepping</h4>
+<p>So far, the iterative and recursive yield approach have both had the 
+advantage that single stepping easily works on the application thread -- both 
+approaches &quot;return control&quot; to the UI, which (as we will see later) when single 
+stepping, lets the single step button click continue the iteration.&nbsp; This 
+is not the case with a non-yielding, or &quot;step and continue&quot;, as I call it, 
+recursion.&nbsp; In order to suspend the recursive algorithm, we have to &quot;gate&quot; 
+the continuation so that the algorithm suspends operation until the user clicks on the single step button.&nbsp; A cheap and dirty approach is to call <code>Application.DoEvents()</code> 
+and spin until a flag is set indicating that the algorithm can continue.&nbsp; 
+This is what I consider a beginner's approach to the problem.&nbsp; A better 
+approach is to use a semaphore to gate the continuation, and to execute the 
+algorithm on a separate thread.&nbsp; This is the approach that I took.</p>
+<p>First, we have the semaphore and its initialization:</p>
+<pre>/// &lt;summary&gt;
+/// Used for single stepping.
+/// &lt;/summary&gt;
+protected Semaphore hopSemaphore;
+
+public RecursiveStepAndContinueAlgorithm(Board board) : base(board)
+{
+  hopSemaphore = new Semaphore(0, 1);
+}</pre>
+<p>To initialize the stepper, we start a task and wait for the semaphore to be 
+released:</p>
+<pre>public override void StartStepper()
+{
+  Task.Factory.StartNew(() =&gt;
+  {
+    hopSemaphore.WaitOne();
+    Step(new HopOptions(board.GetAllowedHops()), SingleStepCallback);
+  });
+}</pre>
+<p>Note that the callback that the recursive algorithm uses for single stepping 
+is different than the callback for simply running the algorithm to conclusion.</p>
+<p>Our stepper then releases the semaphore:</p>
+<pre>public override bool Step()
+{
+  ++Iterations;
+  bool isSolved = !(board.RemainingPegs == 1);
+  hopSemaphore.Release();
+
+  return isSolved;
+}</pre>
+<p>The callback performs the hop, sets the solved flag, and waits until the 
+semaphore is released again before returning to the recursion algorithm:</p>
+<pre>protected bool SingleStepCallback(Hop hop)
+{
+  board.HopPeg(hop);
+  Solved = board.RemainingPegs == 1;
+  hopSemaphore.WaitOne();
+
+  return Solved;
+}</pre>
+<h4>Why No Marshalling Onto The Main Thread?</h4>
+<p>An astute question is, why isn't this call:</p>
+<pre>board.HopPeg(hop);</pre>
+<p>marshaled onto the main thread?&nbsp; The reason is that the UI code that 
+handles the <code>DoHop</code> and <code>UndoHop</code> events only updates the text boxes and list 
+boxes when the algorithm is <i>running</i>, not 
+when the algorithm is <i>single stepping.</i>&nbsp; The stepper UI code updates 
+these controls separately on the main application thread.&nbsp; A further explanation of 
+this logic will be revealed when we discuss the UI next.</p>
+<h2>The UI</h2>
+<p>Next, we'll look at the UI.</p>
+<h3>The Visual Game Board</h3>
+<p><img border="0" src="ui2.png" width="366" height="342"></p>
+<p>The game board is rendered by embedding the FlowSharp canvas, which is a 
+four 
+step process:</p>
+<h4>Step 1: Initializing the FlowSharp modules with the bootstrap loader</h4>
+<pre>Bootstrap(&quot;modules.xml&quot;);</pre>
+<p>The minimum set of modules needed is described in the XML file:</p>
+<pre>&lt;Modules&gt;
+  &lt;Module AssemblyName='Clifton.SemanticProcessorService.dll'/&gt;
+  &lt;Module AssemblyName='FlowSharpService.dll'/&gt;
+  &lt;Module AssemblyName='FlowSharpCanvasService.dll'/&gt;
+  &lt;Module AssemblyName='FlowSharpMouseControllerService.dll'/&gt;
+  &lt;Module AssemblyName='FlowSharpToolboxService.dll'/&gt;
+  &lt;Module AssemblyName='FlowSharpRestService.dll'/&gt;
+  &lt;Module AssemblyName='FlowSharpWebSocketService.dll'/&gt;
+&lt;/Modules&gt;</pre>
+<p>Read more about the bootstrap process and FlowSharp's SOA:</p>
+<ul>
+	<li>
+	<a href="https://www.codeproject.com/Articles/1120518/The-Clifton-Method-Part-III">
+	The Clifton Method Part III - Bootstrapping</a></li>
+<li><a href="https://www.codeproject.com/Articles/1136050/soa#123116">
+FlowSharp's Service Oriented Architecture</a></li>
+</ul>
+<h4>Step 2: Initializing FlowSharp</h4>
+<p>This sets up the canvas:</p>
+<pre>protected void InitializeFlowSharp()
+{
+  var canvasService = Program.ServiceManager.Get&lt;IFlowSharpCanvasService&gt;();
+  canvasService.CreateCanvas(pnlFlowSharp);
+  canvasService.ActiveController.Canvas.EndInit();
+  canvasService.ActiveController.Canvas.Invalidate();
+
+  // Initialize Toolbox so we can drop shapes
+  var toolboxService = Program.ServiceManager.Get&lt;IFlowSharpToolboxService&gt;();
+
+  // We don't display the toolbox, but we need a container.
+  Panel pnlToolbox = new Panel();
+  pnlToolbox.Visible = false;
+  Controls.Add(pnlToolbox);
+
+  toolboxService.CreateToolbox(pnlToolbox);
+  toolboxService.InitializeToolbox();
+
+  var mouseController = Program.ServiceManager.Get&lt;IFlowSharpMouseControllerService&gt;();
+  mouseController.Initialize(canvasService.ActiveController);
+}</pre>
+<h4>Step 3: Drawing the Game Board</h4>
+<pre>protected void DrawBoard()
+{
+  int cx = (pnlFlowSharp.Width - 50)/2;
+  int y = 50;
+  int n = 0;
+
+  Rectangle trect = new Rectangle(cx - NUM_ROWS * 50 + 65, y - 15, NUM_ROWS * 50 + 100, y + NUM_ROWS * 50 + 25);
+  WebSocketHelpers.DropShape(&quot;UpTriangle&quot;, &quot;t&quot;, trect, Color.FromArgb(240, 230, 140));
+
+  NUM_ROWS.ForEach(row =&gt;
+  {
+    row.ForEach(cell =&gt;
+    {
+      string name = &quot;c&quot; + n;
+      Rectangle rect = new Rectangle(cx - 25 * row + 50 * cell, y + row * 50, 30, 30);
+      WebSocketHelpers.DropShape(&quot;Ellipse&quot;, name, rect, Color.White);
+      WebSocketHelpers.UpdateProperty(name, &quot;Text&quot;, n.ToString());
+      ++n;
+    });
+  }, 1);
+}</pre>
+<p>Notice the funky integer ForEach extension method!&nbsp; Also notice that 
+communication between the application and FlowSharp is done over a websocket 
+channel.&nbsp; Why?&nbsp; Because typically FlowSharp is running as a completely 
+separate application, rather than an embedded application, and I never 
+implemented the interface methods for drawing shapes and setting shape 
+properties.&nbsp; However, this does mean that when you run the demo for the 
+first time, you'll probably see this:</p>
+<p><img border="0" src="allowAccess.png" width="527" height="381"></p>
+<p><img border="0" src="trustme.jpg" width="120" height="103">So just go ahead 
+and click on Allow access.&nbsp; There isn't anything else nasty going on.</p>
+<p>(ok, that's bizarre.&nbsp; The above image is Copyright 2004 by Melissa <i>
+Clifton</i>.&nbsp; No relation that I know of!&nbsp; Also, explicit permission 
+to use that image has been given.)</p>
+<h4>Step 4: Drawing the Pegs</h4>
+<p>Lastly, we draw the pegs:</p>
+<pre>protected void ShowPegs()
+{
+  board.NumCells.ForEach(n =&gt; WebSocketHelpers.UpdateProperty(&quot;c&quot; + n, &quot;FillColor&quot;, board.GetPegColor(n).Name));
+  WebSocketHelpers.UpdateProperty(&quot;c&quot; + startPosition, &quot;FillColor&quot;, &quot;White&quot;);
+}</pre>
+<h3>Handling DoHop and UndoHop Events</h3>
+<p><img border="0" src="ui1.png" width="268" height="322"></p>
+<p>The game board fires these events, which the UI hooks:</p>
+<pre>board.DoHop += OnHop;
+board.UndoHop += OnUndoHop;</pre>
+<h4>OnHop</h4>
+<p>When a hop is performed, the canvas is updated to reflect the change:</p>
+<pre>protected void OnHop(object sender, CellChangeEventArgs e)
+{
+  if (ckShowUi.Checked)
+  {
+    WebSocketHelpers.UpdateProperty(&quot;c&quot; + e.Hop.FromCellIndex, &quot;FillColor&quot;, &quot;White&quot;);
+    WebSocketHelpers.UpdateProperty(&quot;c&quot; + e.Hop.HoppedCellIndex, &quot;FillColor&quot;, &quot;White&quot;);
+    WebSocketHelpers.UpdateProperty(&quot;c&quot; + e.Hop.ToCellIndex, &quot;FillColor&quot;, board.GetPegColor(e.Hop.ToCellIndex).Name);
+    UpdateUI();
+  }
+}</pre>
+<p>The checkbox being checked (no pun intended) is used to prevent the UI from 
+updating.&nbsp; Certain starting positions (peg #2, 11, and 13) take a LOT of 
+iterations (~32,000, ~24,000, ~24,000 respectively).&nbsp; You can sit around 
+for several minutes (or longer depending on the delay you've set) waiting for 
+the solution watching the circles blink, or you can uncheck the &quot;UI&quot; checkbox 
+and the solution will be presented pretty much instantly.</p>
+<p>Notice that when a hop is performed, the &quot;from cell&quot; and &quot;hopped cell&quot; are 
+turned white, and the &quot;to cell&quot; gets the peg color of the new &quot;to cell&quot; peg 
+color (that was sort of redundant to say it that way.)</p>
+<h4>OnUndoHop</h4>
+<p>Undoing a hop is the opposite:</p>
+<pre>protected void OnUndoHop(object sender, CellChangeEventArgs e)
+{
+  if (ckShowUi.Checked)
+  {
+    WebSocketHelpers.UpdateProperty(&quot;c&quot; + e.Hop.FromCellIndex, &quot;FillColor&quot;, board.GetPegColor(e.Hop.FromCellIndex).Name);
+    WebSocketHelpers.UpdateProperty(&quot;c&quot; + e.Hop.HoppedCellIndex, &quot;FillColor&quot;, board.GetPegColor(e.Hop.HoppedCellIndex).Name);
+    WebSocketHelpers.UpdateProperty(&quot;c&quot; + e.Hop.ToCellIndex, &quot;FillColor&quot;, &quot;White&quot;);
+    UpdateUI();
+  }
+}</pre>
+<p>the &quot;from&quot; and &quot;hopped&quot; cells are restored to their current peg colors, and 
+the &quot;to&quot; cell is emptied.</p>
+<h4>UpdateUI</h4>
+<p>What is this?&nbsp; It's a bit of a kludge of updating the controls and 
+injecting a user-controlled delay for each step when the algorithm is running.&nbsp; </p>
+<pre>protected void UpdateUI()
+{
+  // We only call DoEvents and delay when the algorithm is running. If single stepping
+  // or perusing the solution, we do NOT want to call DoEvents because additional mouse events
+  // could then fire and the state of the game gets messed up.
+  if (running)
+  {
+    lbSolution.DataSource = algorithm.UndoStack.Reverse().ToList();
+    tbIterations.Text = algorithm.Iterations.ToString(&quot;#,###,##0&quot;);
+    Application.DoEvents();
+    System.Threading.Thread.Sleep(tbIterateDelay.Text.to_i());
+  }
+}</pre>
+<p>The code comments are most revealing, as there's a certain entanglement 
+between single stepping and running the algorithm.&nbsp; And of course, we have 
+to explicitly let the control updates (including the canvas) do their thing.</p>
+<h3>Changing the Starting Position</h3>
+<p>Changing the starting position updates the game board canvas and the internal 
+start position field:</p>
+<pre>private void OnStartPositionChanged(object sender, EventArgs e)
+{
+  startPosition = (int)nudStartPosition.Value;
+  ShowPegs();
+}</pre>
+<p>A real no-brainer!</p>
+<h3>Running the Algorithm</h3>
+<p>Regardless of which algorithm you choose, running the solver is the same:</p>
+<pre>private void btnRun_Click(object sender, EventArgs e)
+{
+  singleStepping = false;
+  ShowPegs();
+  algorithm.Initialize(startPosition);
+  running = true;
+  solutionHops?.Clear();
+  lbSolution.DataSource = new List&lt;Hop&gt;();
+  algorithm.Run();
+  running = false;
+
+  if (algorithm.Solved)
+  {
+    // From first move to last, because the stack has the last move at the top (index 0) of the stack.
+    solutionHops = algorithm.UndoStack.Reverse().ToList();
+    RestoreBoard();
+    solutionHops.Add(new Hop(-1, 0, 0)); // Fake last entry so we can step to the actual 1 peg remaining.
+    lbSolution.DataSource = solutionHops;
+    tbIterations.Text = algorithm.Iterations.ToString(&quot;#,###,##0&quot;);
+    solutionStep = 0;
+    ckShowUi.Checked = true;
+
+    // Reset board so we can navigate the solution
+    board.FillAllCells();
+    board.RemovePeg(startPosition);
+  }
+  else
+  {
+    MessageBox.Show(&quot;No Solution!&quot;, &quot;Brain Teaser&quot;, MessageBoxButtons.OK, MessageBoxIcon.Exclamation);
+  }
+}</pre>
+<p>One of the things that took a while to realize was that I needed to unwind 
+the solution stack to restore the original board colors (along with the 
+earlier-mentioned cloning of the <code>Hop</code> instance):</p>
+<pre>/// &lt;summary&gt;
+/// Undo all hops to restore board (the cell's peg colors) to their original state.
+/// &lt;/summary&gt;
+protected void RestoreBoard()
+{
+  while (algorithm.UndoStack.Count &gt; 0)
+  {
+    Hop hop = algorithm.UndoStack.Pop();
+    board.UndoHopPeg(hop);
+    Application.DoEvents();
+  }
+}</pre>
+<p>Sure, I could have just reset the colors from the initial state of the cells, 
+but this is a nice proof that undoing all the operations results in the initial 
+game board setting.&nbsp; And I worked hard to figure out the issues with this!</p>
+<h3>Single Stepping</h3>
+<p>When the user initiates single stepping, this code runs, again regardless of 
+the algorithm:</p>
+<pre>private void btnSingleStep_Click(object sender, EventArgs e)
+{
+  // Force UI as otherwise single stepping is sort of pointless.
+  ckShowUi.Checked = true;
+
+  if (!singleStepping)
+  {
+    running = false;
+    ShowPegs();
+    algorithm.Initialize(startPosition);
+    algorithm.StartStepper(); // Used for yield recursion.
+  }
+
+  bool next = algorithm.Step();
+  tbIterations.Text = algorithm.Iterations.ToString(&quot;#,###,##0&quot;);
+
+  if (next)
+  {
+    algorithm.PushHop();
+    lbSolution.DataSource = algorithm.UndoStack.Reverse().ToList();
+  }
+
+  singleStepping = next || (board.RemainingPegs &gt; 1 &amp;&amp; next);
+}</pre>
+<p>The iteration counter and <code>ListBox</code> updates as the algorithm works on finding a 
+solution, giving you a nice visual of the process.&nbsp; This <code>PushHop</code> method is 
+sort of an eye-sore for me, as it is only used by the iterating algorithm.&nbsp; 
+You'll also notice some other methods, in each algorithm, that don't do anything 
+because they are not relevant for the specific algorithm implementation.&nbsp; </p>
+<h3>Perusing the Solution</h3>
+<p>Lastly, once a solution is found (every starting position has a solution) you 
+can click on a step in the <code>ListBox</code> or cursor up/down (once the <code>ListBox</code> is 
+selected) and see the solution at your leisure, and memorize a couple to impress 
+your friends!</p>
+<pre>protected void OnSolutionStepChanged(object sender, EventArgs e)
+{
+  int newSolStep = lbSolution.SelectedIndex;
+
+  while (newSolStep &gt; solutionStep)
+  {
+    // Move forward through solution steps.
+    board.HopPeg(solutionHops[solutionStep++]);
+  }
+
+  while (newSolStep &lt; solutionStep)
+  {
+    board.UndoHopPeg(solutionHops[--solutionStep]);
+  }
+}</pre>
+<h3>Setting the Starting Algorithm</h3>
+<p>You'll have to download and build the code to change the algorithm:</p>
+<pre>protected void OnShown(object sender, EventArgs e)
+{
+  board = new Board(NUM_ROWS);
+  algorithm = new IterativeAlgorithm(board);
+  // algorithm = new RecursiveYieldAlgorithm(board);
+  // algorithm = new RecursiveStepAndContinueAlgorithm(board);
+  board.DoHop += OnHop;
+  board.UndoHop += OnUndoHop;
+
+  WebSocketHelpers.ClearCanvas();
+  DrawBoard();
+  ShowPegs();
+}</pre>
+<p><img border="0" src="justKidding.jpg" width="120" height="67"> Just kidding!&nbsp; OK, I overcame my laziness:</p>
+<p><img border="0" src="ui3.png" width="268" height="154"></p>
+<pre>protected void OnSelectedIndexChanged(object sender, EventArgs e)
+{
+  algorithm = new Algorithm[]
+  {
+    new IterativeAlgorithm(board),
+    new RecursiveYieldAlgorithm(board),
+    new RecursiveStepAndContinueAlgorithm(board)
+  }[cbAlgorithm.SelectedIndex];
+}</pre>
+<p>Hmmm.&nbsp; Do you like this better:</p>
+<pre>protected void OnSelectedIndexChanged(object sender, EventArgs e)
+{
+  algorithm = Activator.CreateInstance(new Type[]
+  {
+    typeof(IterativeAlgorithm),
+    typeof(RecursiveYieldAlgorithm),
+    typeof(RecursiveStepAndContinueAlgorithm)
+  }[cbAlgorithm.SelectedIndex], new object[] { board }) as Algorithm;
+}</pre>
+<p>Didn't think so.&nbsp; I suppose you were expecting a <code>switch</code> statement?&nbsp; 
+From me???</p>
+<h2>Conclusion</h2>
+<p>As usual, the code took about 3 hours to write, the article about 8 hours.&nbsp; 
+Good grief.</p>
+<p>On the other hand, I think one of the coolest things about what I've 
+presented here are the three different algorithms: iteration, recursive yield, 
+and recursive step-and-continue.</p>
 
 </body>
 

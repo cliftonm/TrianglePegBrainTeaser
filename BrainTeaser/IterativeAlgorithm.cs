@@ -1,5 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 
 namespace BrainTeaser
 {
@@ -23,7 +22,6 @@ namespace BrainTeaser
 			while (board.RemainingPegs > 1 && Step())
 			{
 				Hop hop = PushHop();
-				board.HopPeg(hop);
 			}
 
 			Solved = board.RemainingPegs == 1;
@@ -56,6 +54,7 @@ namespace BrainTeaser
 		public override Hop PushHop()
 		{
 			Hop hop = HopStack.Peek().CurrrentHop;
+			board.HopPeg(hop);
 			UndoStack.Push(hop);
 
 			return hop;
