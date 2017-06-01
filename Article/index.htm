@@ -11,12 +11,12 @@
 <p><img border="0" src="ui4.png" width="748" height="497"></p>
 <h2>Introduction</h2>
 <p>We have these brain teaser puzzles at work:</p>
+<p><img border="0" src="pegboard.jpg" width="400" height="286"></p>
 <p>We've probably all played them -- the idea being you start with one empty 
 hole, the rest are filled with pegs, and each move consists of hopping a peg to 
 an empty location, thus removing the peg you just hopped.&nbsp; The goal is to 
 remain with just one peg left.</p>
-<p>For a roomful of programmers, no one so far has been able to solve the puzzle 
-(but then again, very few people have actually tried.)&nbsp; Watching one of my 
+<p>For a roomful of programmers, no one (including me!) so far has been able to solve the puzzle.&nbsp; Watching one of my 
 coworkers futility go through various failed iterations, I had the obvious 
 thought -- write a program to find solutions to the puzzle!&nbsp; The second 
 obvious thought was, someone must have done this!&nbsp; Well, turns out, not 
@@ -37,7 +37,13 @@ really.&nbsp; </p>
 <p>OK, so while there are several solutions, I actually didn't find one in C#, 
 and even if I had, there is a certain pleasure in writing something like this 
 oneself, even if it's been done before.&nbsp; And of course, one can challenge 
-oneself to write the code as elegantly and efficiently as possible, etc.&nbsp; </p>
+oneself to write the code as elegantly and efficiently as possible, etc.&nbsp; 
+And more to the point, none of the algorithms presented:</p>
+<ul>
+	<li>had a snazzy UI so you could watch the algorithm processing.</li>
+	<li>implemented iteration and recursion alternatives.</li>
+</ul>
+<p>Ah, opportunity!</p>
 <p><img border="0" src="wayoverboard.jpg" width="120" height="119">And as is apt 
 to occur, I went way overboard.</p>
 <p>So the solution I present here:</p>
@@ -47,11 +53,12 @@ to occur, I went way overboard.</p>
 	<li>Uses a lot of Linq.</li>
 	<li>Embeds <a href="https://www.codeproject.com/Articles/1136050/FlowSharp">
 	FlowSharp</a> so you can watch the algorithm go through the process of 
-	finding a solution.</li>
+	finding a solution (why re-invent the wheel?)</li>
 	<li>Let's you single step through the solution and watch each step so you 
 	can memorize the solution and impress your friends!</li>
 	<li>As with the actual cheap game, there are 3 different colored pegs -- 
-	yellow, blue, and red -- which the UI implements.</li>
+	yellow, blue, and red -- which the UI implements, randomly assigned when you 
+	start the demo.</li>
 	<li><b>Implements three different algorithms</b> so you can peruse the pros and 
 	cons of each:<ul>
 	<li>Iterative -- the search stack is handled as handled as an actual <code>Stack</code> 
@@ -76,6 +83,12 @@ an integer with an optional starting offset:</p>
   for (int n = startIdx; n &lt; i + startIdx; n++) action(n);
 }</pre>
 <p>You'll see that used next.</p>
+<p>I also use this extension method to convert a color to an HTML color of the 
+form #RRGGBB:</p>
+<pre>public static string ToHtmlColor(this Color c, char prefix = '#')
+{
+  return prefix + c.R.ToString(&quot;X2&quot;) + c.G.ToString(&quot;X2&quot;) + c.B.ToString(&quot;X2&quot;);
+}</pre>
 <h3>Data Structures</h3>
 <p>The basic data structures are the <code>Row</code> and <code>Cell</code>.</p>
 <h4>Row</h4>
@@ -830,10 +843,9 @@ board.UndoHop += OnUndoHop;</pre>
 {
   if (ckShowUi.Checked)
   {
-    WebSocketHelpers.UpdateProperty(&quot;c&quot; + e.Hop.FromCellIndex, &quot;FillColor&quot;, &quot;White&quot;);
-    WebSocketHelpers.UpdateProperty(&quot;c&quot; + e.Hop.HoppedCellIndex, &quot;FillColor&quot;, &quot;White&quot;);
-    WebSocketHelpers.UpdateProperty(&quot;c&quot; + e.Hop.ToCellIndex, &quot;FillColor&quot;, board.GetPegColor(e.Hop.ToCellIndex).Name);
-    UpdateUI();
+    UpdateUI(
+      e.Hop.FromCellIndex, e.Hop.HoppedCellIndex, e.Hop.ToCellIndex,
+      Color.White, Color.White, board.GetPegColor(e.Hop.ToCellIndex));
   }
 }</pre>
 <p>The checkbox being checked (no pun intended) is used to prevent the UI from 
@@ -851,10 +863,9 @@ color (that was sort of redundant to say it that way.)</p>
 {
   if (ckShowUi.Checked)
   {
-    WebSocketHelpers.UpdateProperty(&quot;c&quot; + e.Hop.FromCellIndex, &quot;FillColor&quot;, board.GetPegColor(e.Hop.FromCellIndex).Name);
-    WebSocketHelpers.UpdateProperty(&quot;c&quot; + e.Hop.HoppedCellIndex, &quot;FillColor&quot;, board.GetPegColor(e.Hop.HoppedCellIndex).Name);
-    WebSocketHelpers.UpdateProperty(&quot;c&quot; + e.Hop.ToCellIndex, &quot;FillColor&quot;, &quot;White&quot;);
-    UpdateUI();
+    UpdateUI(
+      e.Hop.FromCellIndex, e.Hop.HoppedCellIndex, e.Hop.ToCellIndex,
+      board.GetPegColor(e.Hop.FromCellIndex), board.GetPegColor(e.Hop.HoppedCellIndex), Color.White);
   }
 }</pre>
 <p>the &quot;from&quot; and &quot;hopped&quot; cells are restored to their current peg colors, and 
@@ -862,8 +873,12 @@ the &quot;to&quot; cell is emptied.</p>
 <h4>UpdateUI</h4>
 <p>What is this?&nbsp; It's a bit of a kludge of updating the controls and 
 injecting a user-controlled delay for each step when the algorithm is running.&nbsp; </p>
-<pre>protected void UpdateUI()
+<pre>protected void UpdateUI(int fromIdx, int hopIdx, int toIdx, Color fromColor, Color hoppedColor, Color toColor)
 {
+  WebSocketHelpers.UpdateProperty(&quot;c&quot; + fromIdx, &quot;FillColor&quot;, fromColor.Name);
+  WebSocketHelpers.UpdateProperty(&quot;c&quot; + hopIdx, &quot;FillColor&quot;, hoppedColor.Name);
+  WebSocketHelpers.UpdateProperty(&quot;c&quot; + toIdx, &quot;FillColor&quot;, toColor.Name);
+
   // We only call DoEvents and delay when the algorithm is running. If single stepping
   // or perusing the solution, we do NOT want to call DoEvents because additional mouse events
   // could then fire and the state of the game gets messed up.
@@ -938,6 +953,14 @@ protected void RestoreBoard()
 <p>Sure, I could have just reset the colors from the initial state of the cells, 
 but this is a nice proof that undoing all the operations results in the initial 
 game board setting.&nbsp; And I worked hard to figure out the issues with this!</p>
+<h4>While the Algorthm is Running</h4>
+<p>While the algorithm is running, all the controls are disabled except the 
+ability to change the delay for each step as it is processed.</p>
+<pre>protected void EnableUI(bool state)
+{
+  // Yes, I'm weird.
+  (new Control[] { btnStart, btnSingleStep, nudStartPosition, lbSolution, cbAlgorithm, ckShowUi }).ForEach(ctrl =&gt; ctrl.Enabled = state);
+}</pre>
 <h3>Single Stepping</h3>
 <p>When the user initiates single stepping, this code runs, again regardless of 
 the algorithm:</p>

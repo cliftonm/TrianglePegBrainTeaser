@@ -74,17 +74,13 @@ namespace Demo
 			ShowPegs();
 		}
 
-		/// <summary>
-		/// Update UI.
-		/// </summary>
 		protected void OnHop(object sender, CellChangeEventArgs e)
 		{
 			if (ckShowUi.Checked)
 			{
-				WebSocketHelpers.UpdateProperty("c" + e.Hop.FromCellIndex, "FillColor", "White");
-				WebSocketHelpers.UpdateProperty("c" + e.Hop.HoppedCellIndex, "FillColor", "White");
-				WebSocketHelpers.UpdateProperty("c" + e.Hop.ToCellIndex, "FillColor", board.GetPegColor(e.Hop.ToCellIndex).Name);
-				UpdateUI();
+				UpdateUI(
+					e.Hop.FromCellIndex, e.Hop.HoppedCellIndex, e.Hop.ToCellIndex,
+					Color.White, Color.White, board.GetPegColor(e.Hop.ToCellIndex));
 			}
 		}
 
@@ -92,15 +88,18 @@ namespace Demo
 		{
 			if (ckShowUi.Checked)
 			{
-				WebSocketHelpers.UpdateProperty("c" + e.Hop.FromCellIndex, "FillColor", board.GetPegColor(e.Hop.FromCellIndex).Name);
-				WebSocketHelpers.UpdateProperty("c" + e.Hop.HoppedCellIndex, "FillColor", board.GetPegColor(e.Hop.HoppedCellIndex).Name);
-				WebSocketHelpers.UpdateProperty("c" + e.Hop.ToCellIndex, "FillColor", "White");
-				UpdateUI();
+				UpdateUI(
+					e.Hop.FromCellIndex, e.Hop.HoppedCellIndex, e.Hop.ToCellIndex,
+					board.GetPegColor(e.Hop.FromCellIndex), board.GetPegColor(e.Hop.HoppedCellIndex), Color.White);
 			}
 		}
 
-		protected void UpdateUI()
+		protected void UpdateUI(int fromIdx, int hopIdx, int toIdx, Color fromColor, Color hoppedColor, Color toColor)
 		{
+			WebSocketHelpers.UpdateProperty("c" + fromIdx, "FillColor", fromColor.Name);
+			WebSocketHelpers.UpdateProperty("c" + hopIdx, "FillColor", hoppedColor.Name);
+			WebSocketHelpers.UpdateProperty("c" + toIdx, "FillColor", toColor.Name);
+
 			// We only call DoEvents and delay when the algorithm is running.  If single stepping
 			// or perusing the solution, we do NOT want to call DoEvents because additional mouse events
 			// could then fire and the state of the game gets messed up.
@@ -109,7 +108,12 @@ namespace Demo
 				lbSolution.DataSource = algorithm.UndoStack.Reverse().ToList();
 				tbIterations.Text = algorithm.Iterations.ToString("#,###,##0");
 				Application.DoEvents();
-				System.Threading.Thread.Sleep(tbIterateDelay.Text.to_i());
+				int delay;
+
+				if (int.TryParse(tbIterateDelay.Text, out delay))
+				{
+					System.Threading.Thread.Sleep(delay);
+				}
 			}
 		}
 
@@ -145,12 +149,14 @@ namespace Demo
 		{
 			singleStepping = false;
 			ShowPegs();
+			EnableUI(false);
 			algorithm.Initialize(startPosition);
 			running = true;
 			solutionHops?.Clear();
 			lbSolution.DataSource = new List<Hop>();
 			algorithm.Run();
 			running = false;
+			EnableUI(true);
 
 			if (algorithm.Solved)
 			{
@@ -202,7 +208,7 @@ namespace Demo
 			}
 		}
 
-		private void btnSingleStep_Click(object sender, EventArgs e)
+		protected void btnSingleStep_Click(object sender, EventArgs e)
 		{
 			// Force UI as otherwise single stepping is sort of pointless.
 			ckShowUi.Checked = true;
@@ -243,6 +249,12 @@ namespace Demo
 			}[cbAlgorithm.SelectedIndex], new object[] { board }) as Algorithm;
 
 			singleStepping = false;
+		}
+
+		protected void EnableUI(bool state)
+		{
+			// Yes, I'm weird.
+			(new Control[] { btnStart, btnSingleStep, nudStartPosition, lbSolution, cbAlgorithm, ckShowUi }).ForEach(ctrl => ctrl.Enabled = state);
 		}
 	}
 }
